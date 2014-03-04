@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Definition List Extension for Python-Markdown
 =============================================
@@ -18,15 +19,12 @@ Copyright 2008 - [Waylan Limberg](http://achinghead.com)
 
 """
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from . import Extension
-from ..blockprocessors import BlockProcessor, ListIndentProcessor
-from ..util import etree
 import re
+import markdown
+from markdown.util import etree
 
 
-class DefListProcessor(BlockProcessor):
+class DefListProcessor(markdown.blockprocessors.BlockProcessor):
     """ Process Definition Lists. """
 
     RE = re.compile(r'(^|\n)[ ]{0,3}:[ ]{1,3}(.*?)(\n|$)')
@@ -36,11 +34,10 @@ class DefListProcessor(BlockProcessor):
         return bool(self.RE.search(block))
 
     def run(self, parent, blocks):
-
-        raw_block = blocks.pop(0)
-        m = self.RE.search(raw_block)
-        terms = [l.strip() for l in raw_block[:m.start()].split('\n') if l.strip()]
-        block = raw_block[m.end():]
+        block = blocks.pop(0)
+        m = self.RE.search(block)
+        terms = [l.strip() for l in block[:m.start()].split('\n') if l.strip()]
+        block = block[m.end():]
         no_indent = self.NO_INDENT_RE.match(block)
         if no_indent:
             d, theRest = (block, None)
@@ -51,11 +48,6 @@ class DefListProcessor(BlockProcessor):
         else:
             d = m.group(2)
         sibling = self.lastChild(parent)
-        if not terms and sibling is None:
-            # This is not a definition item. Most likely a paragraph that 
-            # starts with a colon at the begining of a document or list.
-            blocks.insert(0, raw_block)
-            return False
         if not terms and sibling.tag == 'p':
             # The previous paragraph contains the terms
             state = 'looselist'
@@ -69,7 +61,7 @@ class DefListProcessor(BlockProcessor):
         if sibling and sibling.tag == 'dl':
             # This is another item on an existing list
             dl = sibling
-            if not terms and len(dl) and dl[-1].tag == 'dd' and len(dl[-1]):
+            if len(dl) and dl[-1].tag == 'dd' and len(dl[-1]):
                 state = 'looselist'
         else:
             # This is a new list
@@ -87,7 +79,7 @@ class DefListProcessor(BlockProcessor):
         if theRest:
             blocks.insert(0, theRest)
 
-class DefListIndentProcessor(ListIndentProcessor):
+class DefListIndentProcessor(markdown.blockprocessors.ListIndentProcessor):
     """ Process indented children of definition list items. """
 
     ITEM_TYPES = ['dd']
@@ -95,12 +87,12 @@ class DefListIndentProcessor(ListIndentProcessor):
 
     def create_item(self, parent, block):
         """ Create a new dd and parse the block with it as the parent. """
-        dd = etree.SubElement(parent, 'dd')
+        dd = markdown.etree.SubElement(parent, 'dd')
         self.parser.parseBlocks(dd, [block])
  
 
 
-class DefListExtension(Extension):
+class DefListExtension(markdown.Extension):
     """ Add definition lists to Markdown. """
 
     def extendMarkdown(self, md, md_globals):

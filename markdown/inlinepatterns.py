@@ -41,19 +41,17 @@ So, we apply the expressions in the following order:
 * finally we apply strong and emphasis
 """
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from . import util
-from . import odict
+import util
+import odict
 import re
-try:
-    from urllib.parse import urlparse, urlunparse
-except ImportError:
-    from urlparse import urlparse, urlunparse
-try:
-    from html import entities
-except ImportError:
-    import htmlentitydefs as entities
+from urlparse import urlparse, urlunparse
+# If you see an ImportError for htmlentitydefs after using 2to3 to convert for 
+# use by Python3, then you are probably using the buggy version from Python 3.0.
+# We recomend using the tool from Python 3.1 even if you will be running the 
+# code on Python 3.0.  The following line should be converted by the tool to:
+# `from html import entities` and later calls to `htmlentitydefs` should be
+# changed to call `entities`. Python 3.1's tool does this but 3.0's does not.
+import htmlentitydefs
 
 
 def build_inlinepatterns(md_instance, **kwargs):
@@ -107,7 +105,7 @@ LINK_RE = NOIMG + BRK + \
 r'''\(\s*(<.*?>|((?:(?:\(.*?\))|[^\(\)]))*?)\s*((['"])(.*?)\12\s*)?\)'''
 # [text](url) or [text](<url>) or [text](url "title")
 
-IMAGE_LINK_RE = r'\!' + BRK + r'\s*\((<.*?>|([^")]+"[^"]*"|[^\)]*))\)'
+IMAGE_LINK_RE = r'\!' + BRK + r'\s*\((<.*?>|([^\)]*))\)'
 # ![alttxt](http://x.com/) or ![alttxt](<http://x.com/>)
 REFERENCE_RE = NOIMG + BRK+ r'\s?\[([^\]]*)\]'           # [Google][3]
 SHORT_REF_RE = NOIMG + r'\[([^\]]+)\]'                   # [Google]
@@ -143,7 +141,7 @@ The pattern classes
 -----------------------------------------------------------------------------
 """
 
-class Pattern(object):
+class Pattern:
     """Base class that inline patterns subclass. """
 
     def __init__(self, pattern, markdown_instance=None):
@@ -193,7 +191,7 @@ class Pattern(object):
         def itertext(el):
             ' Reimplement Element.itertext for older python versions '
             tag = el.tag
-            if not isinstance(tag, util.string_type) and tag is not None:
+            if not isinstance(tag, basestring) and tag is not None:
                 return
             if el.text:
                 yield el.text
@@ -206,7 +204,7 @@ class Pattern(object):
             id = m.group(1)
             if id in stash:
                 value = stash.get(id)
-                if isinstance(value, util.string_type):
+                if isinstance(value, basestring):
                     return value
                 else:
                     # An etree Element - return text content only
@@ -231,7 +229,7 @@ class EscapePattern(Pattern):
         if char in self.markdown.ESCAPED_CHARS:
             return '%s%s%s' % (util.STX, ord(char), util.ETX)
         else:
-            return None 
+            return '\\%s' % char
 
 
 class SimpleTagPattern(Pattern):
@@ -344,6 +342,7 @@ class LinkPattern(Pattern):
         `username:password@host:port`.
 
         """
+        url = url.replace(' ', '%20')
         if not self.markdown.safeMode:
             # Return immediately bipassing parsing.
             return url
@@ -355,18 +354,14 @@ class LinkPattern(Pattern):
             return ''
         
         locless_schemes = ['', 'mailto', 'news']
-        allowed_schemes = locless_schemes + ['http', 'https', 'ftp', 'ftps']
-        if scheme not in allowed_schemes:
-            # Not a known (allowed) scheme. Not safe.
-            return ''
-            
         if netloc == '' and scheme not in locless_schemes:
-            # This should not happen. Treat as suspect.
+            # This fails regardless of anything else. 
+            # Return immediately to save additional proccessing
             return ''
 
         for part in url[2:]:
             if ":" in part:
-                # A colon in "path", "parameters", "query" or "fragment" is suspect.
+                # Not a safe url
                 return ''
 
         # Url passes all tests. Return url as-is.
@@ -437,10 +432,6 @@ class ImageReferencePattern(ReferencePattern):
         el.set("src", self.sanitize_url(href))
         if title:
             el.set("title", title)
-
-        if self.markdown.enable_attributes:
-            text = handleAttributes(text, el)
-
         el.set("alt", self.unescape(text))
         return el
 
@@ -465,7 +456,7 @@ class AutomailPattern(Pattern):
 
         def codepoint2name(code):
             """Return entity definition by code, or the code if not defined."""
-            entity = entities.codepoint2name.get(code)
+            entity = htmlentitydefs.codepoint2name.get(code)
             if entity:
                 return "%s%s;" % (util.AMP_SUBSTITUTE, entity)
             else:

@@ -22,7 +22,7 @@ Limberg](http://achinghead.com/) and [Artem Yunusov](http://blog.splyer.com).
 
 Contact: markdown@freewisdom.org
 
-Copyright 2007-2013 The Python Markdown Project (v. 1.7 and later)
+Copyright 2007-2012 The Python Markdown Project (v. 1.7 and later)
 Copyright 200? Django Software Foundation (OrderedDict implementation)
 Copyright 2004, 2005, 2006 Yuri Takhteyev (v. 0.2-1.6b)
 Copyright 2004 Manfred Stienstra (the original version)
@@ -30,27 +30,26 @@ Copyright 2004 Manfred Stienstra (the original version)
 License: BSD (see LICENSE for details).
 """
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from .__version__ import version, version_info
+from __version__ import version, version_info
+import re
 import codecs
 import sys
 import logging
-from . import util
-from .preprocessors import build_preprocessors
-from .blockprocessors import build_block_parser
-from .treeprocessors import build_treeprocessors
-from .inlinepatterns import build_inlinepatterns
-from .postprocessors import build_postprocessors
-from .extensions import Extension
-from .serializers import to_html_string, to_xhtml_string
+import util
+from preprocessors import build_preprocessors
+from blockprocessors import build_block_parser
+from treeprocessors import build_treeprocessors
+from inlinepatterns import build_inlinepatterns
+from postprocessors import build_postprocessors
+from extensions import Extension
+from serializers import to_html_string, to_xhtml_string
 
 __all__ = ['Markdown', 'markdown', 'markdownFromFile']
 
 logger = logging.getLogger('MARKDOWN')
 
 
-class Markdown(object):
+class Markdown:
     """Convert Markdown to HTML."""
 
     doc_tag = "div"     # Element used to wrap document - later removed
@@ -100,7 +99,7 @@ class Markdown(object):
         * html_replacement_text: Text used when safe_mode is set to "replace".
         * tab_length: Length of tabs in the source. Default: 4
         * enable_attributes: Enable the conversion of attributes. Default: True
-        * smart_emphasis: Treat `_connected_words_` intelligently Default: True
+        * smart_emphasis: Treat `_connected_words_` intelegently Default: True
         * lazy_ol: Ignore number of first item of ordered lists. Default: True
 
         """
@@ -109,7 +108,7 @@ class Markdown(object):
         pos = ['extensions', 'extension_configs', 'safe_mode', 'output_format']
         c = 0
         for arg in args:
-            if pos[c] not in kwargs:
+            if not kwargs.has_key(pos[c]):
                 kwargs[pos[c]] = arg
             c += 1
             if c == len(pos):
@@ -121,7 +120,7 @@ class Markdown(object):
             setattr(self, option, kwargs.get(option, default))
 
         self.safeMode = kwargs.get('safe_mode', False)
-        if self.safeMode and 'enable_attributes' not in kwargs:
+        if self.safeMode and not kwargs.has_key('enable_attributes'):
             # Disable attributes in safeMode when not explicitly set
             self.enable_attributes = False
 
@@ -159,7 +158,7 @@ class Markdown(object):
 
         """
         for ext in extensions:
-            if isinstance(ext, util.string_type):
+            if isinstance(ext, basestring):
                 ext = self.build_extension(ext, configs.get(ext, []))
             if isinstance(ext, Extension):
                 ext.extendMarkdown(self, globals())
@@ -193,13 +192,13 @@ class Markdown(object):
             module_name = '.'.join(['markdown.extensions', ext_name])
 
         # Try loading the extension first from one place, then another
-        try: # New style (markdown.extensions.<extension>)
+        try: # New style (markdown.extensons.<extension>)
             module = __import__(module_name, {}, {}, [module_name.rpartition('.')[0]])
         except ImportError:
             module_name_old_style = '_'.join(['mdx', ext_name])
             try: # Old style (mdx_<extension>)
                 module = __import__(module_name_old_style)
-            except ImportError as e:
+            except ImportError, e:
                 message = "Failed loading extension '%s' from '%s' or '%s'" \
                     % (ext_name, module_name, module_name_old_style)
                 e.args = (message,) + e.args[1:]
@@ -209,7 +208,7 @@ class Markdown(object):
         # function called makeExtension()
         try:
             return module.makeExtension(configs.items())
-        except AttributeError as e:
+        except AttributeError, e:
             message = e.args[0]
             message = "Failed to initiate extension " \
                       "'%s': %s" % (ext_name, message)
@@ -239,8 +238,8 @@ class Markdown(object):
         self.output_format = format.lower()
         try:
             self.serializer = self.output_formats[self.output_format]
-        except KeyError as e:
-            valid_formats = list(self.output_formats.keys())
+        except KeyError, e:
+            valid_formats = self.output_formats.keys()
             valid_formats.sort()
             message = 'Invalid Output Format: "%s". Use one of %s.' \
                        % (self.output_format, 
@@ -273,14 +272,19 @@ class Markdown(object):
 
         # Fixup the source text
         if not source.strip():
-            return ''  # a blank unicode string
+            return u""  # a blank unicode string
 
         try:
-            source = util.text_type(source)
-        except UnicodeDecodeError as e:
+            source = unicode(source)
+        except UnicodeDecodeError, e:
             # Customise error message while maintaining original trackback
             e.reason += '. -- Note: Markdown only accepts unicode input!'
             raise
+
+        source = source.replace(util.STX, "").replace(util.ETX, "")
+        source = source.replace("\r\n", "\n").replace("\r", "\n") + "\n\n"
+        source = re.sub(r'\n\s+\n', '\n\n', source)
+        source = source.expandtabs(self.tab_length)
 
         # Split into lines and run the line preprocessors.
         self.lines = source.split("\n")
@@ -293,7 +297,7 @@ class Markdown(object):
         # Run the tree-processors
         for treeprocessor in self.treeprocessors.values():
             newRoot = treeprocessor.run(root)
-            if newRoot is not None:
+            if newRoot:
                 root = newRoot
 
         # Serialize _properly_.  Strip top-level tags.
@@ -342,7 +346,7 @@ class Markdown(object):
 
         # Read the source
         if input:
-            if isinstance(input, util.string_type):
+            if isinstance(input, str):
                 input_file = codecs.open(input, mode="r", encoding=encoding)
             else:
                 input_file = codecs.getreader(encoding)(input)
@@ -350,7 +354,7 @@ class Markdown(object):
             input_file.close()
         else:
             text = sys.stdin.read()
-            if not isinstance(text, util.text_type):
+            if not isinstance(text, unicode):
                 text = text.decode(encoding)
 
         text = text.lstrip('\ufeff') # remove the byte-order mark
@@ -360,7 +364,7 @@ class Markdown(object):
 
         # Write to file or stdout
         if output:
-            if isinstance(output, util.string_type):
+            if isinstance(output, str):
                 output_file = codecs.open(output, "w",
                                           encoding=encoding,
                                           errors="xmlcharrefreplace")
@@ -429,7 +433,7 @@ def markdownFromFile(*args, **kwargs):
     pos = ['input', 'output', 'extensions', 'encoding']
     c = 0
     for arg in args:
-        if pos[c] not in kwargs:
+        if not kwargs.has_key(pos[c]):
             kwargs[pos[c]] = arg
         c += 1
         if c == len(pos):

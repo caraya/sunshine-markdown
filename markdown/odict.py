@@ -1,9 +1,3 @@
-from __future__ import unicode_literals
-from __future__ import absolute_import
-from . import util
-
-from copy import deepcopy
-
 class OrderedDict(dict):
     """
     A dictionary that keeps its keys in the order in which they're inserted.
@@ -17,44 +11,34 @@ class OrderedDict(dict):
         return instance
 
     def __init__(self, data=None):
-        if data is None or isinstance(data, dict):
-            data = data or []
-            super(OrderedDict, self).__init__(data)
-            self.keyOrder = list(data) if data else []
+        if data is None:
+            data = {}
+        super(OrderedDict, self).__init__(data)
+        if isinstance(data, dict):
+            self.keyOrder = data.keys()
         else:
-            super(OrderedDict, self).__init__()
-            super_set = super(OrderedDict, self).__setitem__
+            self.keyOrder = []
             for key, value in data:
-                # Take the ordering from first key
-                if key not in self:
+                if key not in self.keyOrder:
                     self.keyOrder.append(key)
-                # But override with last value in data (dict() does this)
-                super_set(key, value)
 
     def __deepcopy__(self, memo):
+        from copy import deepcopy
         return self.__class__([(key, deepcopy(value, memo))
-                               for key, value in self.items()])
-
-    def __copy__(self):
-        # The Python's default copy implementation will alter the state
-        # of self. The reason for this seems complex but is likely related to
-        # subclassing dict.
-        return self.copy()
+                               for key, value in self.iteritems()])
 
     def __setitem__(self, key, value):
-        if key not in self:
-            self.keyOrder.append(key)
         super(OrderedDict, self).__setitem__(key, value)
+        if key not in self.keyOrder:
+            self.keyOrder.append(key)
 
     def __delitem__(self, key):
         super(OrderedDict, self).__delitem__(key)
         self.keyOrder.remove(key)
 
     def __iter__(self):
-        return iter(self.keyOrder)
-
-    def __reversed__(self):
-        return reversed(self.keyOrder)
+        for k in self.keyOrder:
+            yield k
 
     def pop(self, k, *args):
         result = super(OrderedDict, self).pop(k, *args)
@@ -70,51 +54,41 @@ class OrderedDict(dict):
         self.keyOrder.remove(result[0])
         return result
 
-    def _iteritems(self):
+    def items(self):
+        return zip(self.keyOrder, self.values())
+
+    def iteritems(self):
         for key in self.keyOrder:
-            yield key, self[key]
+            yield key, super(OrderedDict, self).__getitem__(key)
 
-    def _iterkeys(self):
+    def keys(self):
+        return self.keyOrder[:]
+
+    def iterkeys(self):
+        return iter(self.keyOrder)
+
+    def values(self):
+        return [super(OrderedDict, self).__getitem__(k) for k in self.keyOrder]
+
+    def itervalues(self):
         for key in self.keyOrder:
-            yield key
-
-    def _itervalues(self):
-        for key in self.keyOrder:
-            yield self[key]
-
-    if util.PY3:
-        items = _iteritems
-        keys = _iterkeys
-        values = _itervalues
-    else:
-        iteritems = _iteritems
-        iterkeys = _iterkeys
-        itervalues = _itervalues
-
-        def items(self):
-            return [(k, self[k]) for k in self.keyOrder]
-
-        def keys(self):
-            return self.keyOrder[:]
-
-        def values(self):
-            return [self[k] for k in self.keyOrder]
+            yield super(OrderedDict, self).__getitem__(key)
 
     def update(self, dict_):
-        for k in dict_:
-            self[k] = dict_[k]
+        for k, v in dict_.items():
+            self.__setitem__(k, v)
 
     def setdefault(self, key, default):
-        if key not in self:
+        if key not in self.keyOrder:
             self.keyOrder.append(key)
         return super(OrderedDict, self).setdefault(key, default)
 
     def value_for_index(self, index):
-        """Returns the value of the item at the given zero-based index."""
+        """Return the value of the item at the given zero-based index."""
         return self[self.keyOrder[index]]
 
     def insert(self, index, key, value):
-        """Inserts the key, value pair before the item with the given index."""
+        """Insert the key, value pair before the item with the given index."""
         if key in self.keyOrder:
             n = self.keyOrder.index(key)
             del self.keyOrder[n]
@@ -124,16 +98,18 @@ class OrderedDict(dict):
         super(OrderedDict, self).__setitem__(key, value)
 
     def copy(self):
-        """Returns a copy of this object."""
+        """Return a copy of this object."""
         # This way of initializing the copy means it works for subclasses, too.
-        return self.__class__(self)
+        obj = self.__class__(self)
+        obj.keyOrder = self.keyOrder[:]
+        return obj
 
     def __repr__(self):
         """
-        Replaces the normal dict.__repr__ with a version that returns the keys
-        in their Ordered order.
+        Replace the normal dict.__repr__ with a version that returns the keys
+        in their sorted order.
         """
-        return '{%s}' % ', '.join(['%r: %r' % (k, v) for k, v in self._iteritems()])
+        return '{%s}' % ', '.join(['%r: %r' % (k, v) for k, v in self.items()])
 
     def clear(self):
         super(OrderedDict, self).clear()
@@ -183,7 +159,7 @@ class OrderedDict(dict):
                 self.keyOrder.insert(i, key)
             else:
                 self.keyOrder.append(key)
-        except Exception as e:
+        except Exception, e:
             # restore to prevent data loss and reraise
             self.keyOrder.insert(n, key)
             raise e
