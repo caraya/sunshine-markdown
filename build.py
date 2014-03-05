@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # Copyright 2012, Gregg Tavares.
 # All rights reserved.
 #
@@ -110,14 +110,14 @@ class Builder(object):
 
 
   def Process(self):
-    self.ApplyTemplateToFiles("templates/lesson.template", "webgl/lessons/*.md")
+    self.ApplyTemplateToFiles("templates/chapter.template", "content/*.md")
 
 
     toc = ['<li><a href="%s">%s</a></li>' % (a["dst_file_name"], a["title"]) for a in self.articles]
 
 
-    self.ApplyTemplateToFile("templates/lesson.template", "index.md", "index.html", {
-        "table_of_contents": "<ul>" + "\n".join(toc) + "</ul>",
+    self.ApplyTemplateToFile("templates/nav.template", "index.md", "nav.html", {
+        "table_of_contents":  "\n".join(toc),
       })
 
 def main (argv):
